@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전해질 & 비전해질 시뮬레이션</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #e0e0ff;
+            text-align: center;
+            margin-bottom: 6px;
+            font-size: 2em;
+            text-shadow: 0 0 20px rgba(100,150,255,0.8);
+        }
+
+        .subtitle {
+            color: #aaa;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1em;
+        }
+
+        /* 버튼 패널 */
+        .button-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+
+        .btn {
+            padding: 13px 26px;
+            font-size: 1.05em;
+            font-weight: bold;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.35);
+        }
+
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.45); }
+        .btn:active { transform: translateY(0); }
+
+        .btn.active {
+            outline: 4px solid #fff;
+            outline-offset: 2px;
+        }
+
+        .btn-water  { background: linear-gradient(135deg,#43cea2,#185a9d); color:#fff; }
+        .btn-nacl   { background: linear-gradient(135deg,#f7971e,#ffd200); color:#333; }
+        .btn-sugar  { background: linear-gradient(135deg,#c94b4b,#4b134f); color:#fff; }
+        .btn-plus   { background: linear-gradient(135deg,#ee0979,#ff6a00); color:#fff; }
+        .btn-minus  { background: linear-gradient(135deg,#1a78c2,#00c6ff); color:#fff; }
+        .btn-reset  { background: linear-gradient(135deg,#373b44,#4286f4); color:#fff; }
+
+        .btn:disabled {
+            opacity: 0.38;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 상태 바 */
+        .status-bar {
+            display: flex;
+            gap: 14px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .status-item {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            padding: 7px 16px;
+            color: #ccc;
+            font-size: 0.92em;
+        }
+
+        .status-item span { font-weight: bold; color: #7ef7ff; }
+
+        /* 캔버스 래퍼 */
+        .sim-wrapper {
+            width: 900px;
+            max-width: 98vw;
+        }
+
+        canvas {
+            background: rgba(255,255,255,0.02);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            display: block;
+            width: 100%;
+        }
+
+        /* 정보 박스 */
+        .info-box {
+            margin-top: 18px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 15px;
+            padding: 18px 28px;
+            color: #ddd;
+            width: 900px;
+            max-width: 98vw;
+            line-height: 1.75;
+            font-size: 1em;
+        }
+
+        .info-box h3 { color: #7ef7ff; margin-bottom: 10px; font-size: 1.12em; }
+        .hp { color: #ff6a6a; font-weight: bold; }
+        .hn { color: #6ab4ff; font-weight: bold; }
+        .hg { color: #ffd700; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<h1>⚡ 전해질 & 비전해질 시뮬레이션</h1>
+<p class="subtitle">전류가 흐를 때 이온의 움직임을 관찰해 보세요!</p>
+
+<div class="button-panel">
+    <button class="btn btn-water" id="btnWater"  onclick="doWater()">💧 물 넣기</button>
+    <button class="btn btn-nacl"  id="btnNacl"   onclick="doExp('nacl')"  disabled>🧂 염화나트륨 실험</button>
+    <button class="btn btn-sugar" id="btnSugar"  onclick="doExp('sugar')" disabled>🍬 설탕 실험</button>
+    <button class="btn btn-plus"  id="btnPlus"   onclick="doPole('plus')" disabled>🔴 + 극 연결하기</button>
+    <button class="btn btn-minus" id="btnMinus"  onclick="doPole('minus')" disabled>🔵 - 극 연결하기</button>
+    <button class="btn btn-reset" id="btnReset"  onclick="doReset()">🔄 모두 취소하기</button>
+</div>
+
+<div class="status-bar">
+    <div class="status-item">물: <span id="stWater">없음</span></div>
+    <div class="status-item">실험 물질: <span id="stExp">미선택</span></div>
+    <div class="status-item">+ 극: <span id="stPlus">미연결</span></div>
+    <div class="status-item">- 극: <span id="stMinus">미연결</span></div>
+    <div class="status-item">전류: <span id="stCurrent">없음</span></div>
+</div>
+
+<div class="sim-wrapper">
+    <canvas id="c" width="900" height="560"></canvas>
+</div>
+
+<div class="info-box" id="infoBox">
+    <h3>📚 실험 안내</h3>
+    <p>
+        ① <strong>💧 물 넣기</strong> 버튼을 먼저 눌러 비커에 물을 채우세요.<br>
+        ② 실험할 물질을 선택하세요. (염화나트륨 또는 설탕)<br>
+        ③ <span class="hp">+ 극 연결하기</span>와 <span class="hn">- 극 연결하기</span> 버튼으로 전극을 연결하세요.<br>
+        ④ 두 전극이 모두 연결되면 이온의 이동을 관찰할 수 있습니다.<br>
+        ⑤ <strong>모두 취소하기</strong> 버튼으로 초기화할 수 있습니다.
+    </p>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  캔버스 & 상수
+// ════════════════════════════════════════════
+const cv = document.getElementById('c');
+const cx = cv.getContext('2d');
+const W  = cv.width;   // 900
+const H  = cv.height;  // 560
+
+// 비커 영역 (캔버스 기준)
+const BL = 120, BR = 780, BT = 100, BB = 490;
+const BW = BR - BL, BH = BB - BT;
+
+// 전극 x 위치 (비커 내부 좌우)
+const PX = BL + 70;   // (+)극 x
+const MX = BR - 70;   // (-)극 x
+
+// ════════════════════════════════════════════
+//  상태
+// ════════════════════════════════════════════
+let hasWater   = false;
+let expType    = null;   // 'nacl' | 'sugar' | null
+let plusOn     = false;
+let minusOn    = false;
+let particles  = [];
+let animID     = null;
+let running    = false;
+let tick       = 0;
+
+// 물 채우기 애니메이션
+let waterLevel   = BB;   // 현재 수면 y (BB = 비어있음, BT+30 = 가득)
+let waterFilling = false;
+const WATER_FULL = BT + 30;
+
+// ════════════════════════════════════════════
+//  버튼 핸들러
+// ════════════════════════════════════════════
+function doWater() {
+    if (hasWater) return;
+    hasWater = true;
+    waterFilling = true;
+    document.getElementById('btnWater').classList.add('active');
+    document.getElementById('stWater').textContent = '있음 💧';
+    setExpButtons(true);
+    updateInfo();
+    if (!running) startLoop();
+}
+
+function doExp(type) {
+    if (!hasWater) return;
+    expType = type;
+    document.getElementById('btnNacl').classList.toggle('active',  type==='nacl');
+    document.getElementById('btnSugar').classList.toggle('active', type==='sugar');
+    document.getElementById('stExp').textContent =
+        type === 'nacl' ? '염화나트륨 (NaCl)' : '설탕 (C₁₂H₂₂O₁₁)';
+    setPoleButtons(true);
+    initParticles();
+    updateInfo();
+    tryStart();
+}
+
+function doPole(pole) {
+    if (pole === 'plus') {
+        plusOn = true;
+        document.getElementById('btnPlus').classList.add('active');
+        document.getElementById('stPlus').textContent = '연결됨 ✅';
+    } else {
+        minusOn = true;
+        document.getElementById('btnMinus').classList.add('active');
+        document.getElementById('stMinus').textContent = '연결됨 ✅';
+    }
+    updateInfo();
+    tryStart();
+}
+
+function doReset() {
+    hasWater    = false;
+    expType     = null;
+    plusOn      = false;
+    minusOn     = false;
+    particles   = [];
+    waterLevel  = BB;
+    waterFilling= false;
+    tick        = 0;
+
+    ['btnWater','btnNacl','btnSugar','btnPlus','btnMinus'].forEach(id =>
+        document.getElementById(id).classList.remove('active'));
+
+    document.getElementById('stWater').textContent   = '없음';
+    document.getElementById('stExp').textContent     = '미선택';
+    document.getElementById('stPlus').textContent    = '미연결';
+    document.getElementById('stMinus').textContent   = '미연결';
+    document.getElementById('stCurrent').textContent = '없음';
+
+    setExpButtons(false);
+    setPoleButtons(false);
+    updateInfo();
+
+    stopLoop();
+    drawScene();   // 정지 화면
+}
+
+// ════════════════════════════════════════════
+//  버튼 활성/비활성
+// ════════════════════════════════════════════
+function setExpButtons(on) {
+    document.getElementById('btnNacl').disabled  = !on;
+    document.getElementById('btnSugar').disabled = !on;
+}
+function setPoleButtons(on) {
+    document.getElementById('btnPlus').disabled  = !on;
+    document.getElementById('btnMinus').disabled = !on;
+}
+
+// ════════════════════════════════════════════
+//  파티클 초기화
+// ════════════════════════════════════════════
+function initParticles() {
+    particles = [];
+    const waterTop = waterFilling ? WATER_FULL : waterLevel;
+    const margin = 30;
+    const count  = 18;
+
+    if (expType === 'nacl') {
+        for (let i = 0; i < count; i++) {
+            particles.push(makeParticle('Na+', waterTop));
+            particles.push(makeParticle('Cl-', waterTop));
+        }
+    } else if (expType === 'sugar') {
+        for (let i = 0; i < count * 2; i++) {
+            particles.push(makeParticle('sugar', waterTop));
+        }
+    }
+}
+
+function makeParticle(type, waterTop) {
+    const margin = 35;
+    const x = rand(BL + margin, BR - margin);
+    const y = rand(waterTop + 10, BB - margin);
+    let r, color, label;
+    if (type === 'Na+')  { r=14; color='#ff8c42'; label='Na⁺'; }
+    else if (type === 'Cl-')   { r=16; color='#5bc8f5'; label='Cl⁻'; }
+    else                 { r=13; color='#f9ca24'; label='설탕'; }
+    return { type, x, y, vx:(Math.random()-.5)*.6, vy:(Math.random()-.5)*.6, r, color, label };
+}
+
+function rand(a, b) { return a + Math.random()*(b-a); }
+
+// ════════════════════════════════════════════
+//  루프
+// ════════════════════════════════════════════
+function tryStart() {
+    document.getElementById('stCurrent').textContent =
+        (expType && plusOn && minusOn)
+            ? (expType==='nacl' ? '흐름 ⚡' : '흐르지 않음 ✗')
+            : '없음';
+    if (!running) startLoop();
+}
+
+function startLoop() {
+    running = true;
+    loop();
+}
+
+function stopLoop() {
+    running = false;
+    if (animID) { cancelAnimationFrame(animID); animID = null; }
+}
+
+function loop() {
+    if (!running) return;
+    tick++;
+    update();
+    drawScene();
+    animID = requestAnimationFrame(loop);
+}
+
+// ════════════════════════════════════════════
+//  물리 업데이트
+// ════════════════════════════════════════════
+function update() {
+    // 물 채우기
+    if (waterFilling) {
+        waterLevel -= 4.5;
+        if (waterLevel <= WATER_FULL) {
+            waterLevel   = WATER_FULL;
+            waterFilling = false;
+        }
+        return;   // 물 채우는 동안 파티클 이동 없음
+    }
+
+    const active = expType && plusOn && minusOn;
+
+    particles.forEach(p => {
+        if (p.type === 'Na+') {
+            if (active) {
+                // Na+ → (-)극(오른쪽)
+                drift(p, MX, (BT+BB)/2, 0.22, 0.10);
+            } else {
+                brownian(p, 0.45);
+            }
+        } else if (p.type === 'Cl-') {
+            if (active) {
+                // Cl- → (+)극(왼쪽)
+                drift(p, PX, (BT+BB)/2, 0.22, 0.10);
+            } else {
+                brownian(p, 0.45);
+            }
+        } else {
+            // 설탕: 항상 브라운 운동
+            brownian(p, 0.4);
+        }
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // 비커 경계 반사
+        const m = p.r + 4;
+        if (p.x < BL+m) { p.x=BL+m; p.vx=Math.abs(p.vx)*0.7; }
+        if (p.x > BR-m) { p.x=BR-m; p.vx=-Math.abs(p.vx)*0.7; }
+        if (p.y < waterLevel+m) { p.y=waterLevel+m; p.vy=Math.abs(p.vy)*0.7; }
+        if (p.y > BB-m) { p.y=BB-m; p.vy=-Math.abs(p.vy)*0.7; }
+    });
+}
+
+function drift(p, tx, ty, sx, sy) {
+    const dx = tx - p.x, dy = ty - p.y;
+    const d  = Math.sqrt(dx*dx + dy*dy);
+    if (d > 20) {
+        p.vx += (dx/d)*sx;
+        p.vy += (dy/d)*sy;
+    }
+    p.vx += (Math.random()-.5)*0.18;
+    p.vy += (Math.random()-.5)*0.18;
+    p.vx *= 0.87; p.vy *= 0.87;
+}
+
+function brownian(p, s) {
+    p.vx += (Math.random()-.5)*s;
+    p.vy += (Math.random()-.5)*s;
+    p.vx *= 0.86; p.vy *= 0.86;
+}
+
+// ════════════════════════════════════════════
+//  그리기
+// ════════════════════════════════════════════
+function drawScene() {
+    cx.clearRect(0,0,W,H);
+    drawBeakerBody();
+    if (hasWater) drawWater();
+    drawBeakerGlass();
+    if (hasWater && (plusOn || minusOn)) drawElectrodes();
+    if (hasWater && expType && plusOn && minusOn) drawBatteryWire();
+    drawParticles();
+    if (hasWater && expType && plusOn && minusOn) drawArrows();
+    if (expType === 'sugar' && plusOn && minusOn) drawNoCurrentMsg();
+    if (!hasWater) drawIdleMsg();
+}
+
+/* ── 비커 몸체 (유리 외곽선, 바닥) ── */
+function drawBeakerBody() {
+    cx.save();
+    // 비커 내부 (빈 상태)
+    cx.beginPath();
+    cx.moveTo(BL, BT);
+    cx.lineTo(BL, BB);
+    cx.lineTo(BR, BB);
+    cx.lineTo(BR, BT);
+    cx.fillStyle = 'rgba(180,220,255,0.04)';
+    cx.fill();
+    cx.restore();
+}
+
+/* ── 물 ── */
+function drawWater() {
+    cx.save();
+    const grad = cx.createLinearGradient(BL, waterLevel, BR, BB);
+    if (expType === 'nacl') {
+        grad.addColorStop(0,'rgba(100,180,255,0.30)');
+        grad.addColorStop(1,'rgba(50,120,200,0.42)');
+    } else if (expType === 'sugar') {
+        grad.addColorStop(0,'rgba(255,220,100,0.22)');
+        grad.addColorStop(1,'rgba(200,160,50,0.35)');
+    } else {
+        grad.addColorStop(0,'rgba(140,210,255,0.22)');
+        grad.addColorStop(1,'rgba(80,160,220,0.32)');
+    }
+
+    cx.beginPath();
+    cx.rect(BL+3, waterLevel, BW-6, BB-waterLevel);
+    cx.fillStyle = grad;
+    cx.fill();
+
+    // 수면 파동 효과
+    cx.beginPath();
+    const wt = waterLevel;
+    cx.moveTo(BL+3, wt);
+    for (let xi = BL+3; xi <= BR-3; xi += 6) {
+        const wave = waterFilling ? 0 : Math.sin((xi + tick*1.5)*0.06)*2.5;
+        cx.lineTo(xi, wt + wave);
+    }
+    cx.lineTo(BR-3, wt);
+    cx.lineTo(BR-3, wt-3);
+    cx.lineTo(BL+3, wt-3);
+    cx.closePath();
+    cx.fillStyle = 'rgba(180,230,255,0.55)';
+    cx.fill();
+
+    cx.restore();
+}
+
+/* ── 비커 유리 (전면 렌더링) ── */
+function drawBeakerGlass() {
+    cx.save();
+    cx.lineWidth = 5;
+    cx.strokeStyle = 'rgba(160,210,255,0.75)';
+    cx.lineJoin = 'round';
+    cx.lineCap  = 'round';
+
+    // 비커 형태 (U자 + 위 양끝 열려있음)
+    cx.beginPath();
+    cx.moveTo(BL, BT);
+    cx.lineTo(BL, BB-12);
+    cx.quadraticCurveTo(BL, BB, BL+12, BB);
+    cx.lineTo(BR-12, BB);
+    cx.quadraticCurveTo(BR, BB, BR, BB-12);
+    cx.lineTo(BR, BT);
+    cx.stroke();
+
+    // 비커 테두리 상단 테
+    cx.beginPath();
+    cx.moveTo(BL-8, BT);
+    cx.lineTo(BR+8, BT);
+    cx.lineWidth = 7;
+    cx.stroke();
+
+    // 눈금선
+    cx.lineWidth = 1.5;
+    cx.strokeStyle = 'rgba(160,210,255,0.3)';
+    for (let i=1; i<=4; i++) {
+        const gy = BB - (BH/5)*i;
+        cx.beginPath();
+        cx.moveTo(BL+3,  gy);
+        cx.lineTo(BL+22, gy);
+        cx.stroke();
+        cx.font = '11px Arial';
+        cx.fillStyle = 'rgba(160,210,255,0.5)';
+        cx.textAlign = 'left';
+        cx.fillText(i*20+'mL', BL+25, gy+4);
+    }
+
+    // 광택
+    cx.beginPath();
+    cx.moveTo(BL+12, BT+10);
+    cx.lineTo(BL+12, BB-30);
+    cx.lineWidth = 5;
+    cx.strokeStyle = 'rgba(255,255,255,0.13)';
+    cx.stroke();
+
+    cx.restore();
+}
+
+/* ── 전극 ── */
+function drawElectrodes() {
+    cx.save();
+    cx.lineCap = 'round';
+
+    if (plusOn) {
+        // (+)극 막대
+        cx.beginPath();
+        cx.moveTo(PX, BT - 5);
+        cx.lineTo(PX, BB - 25);
+        cx.strokeStyle = '#ff4444';
+        cx.lineWidth   = 9;
+        cx.stroke();
+
+        // 글로우
+        const g = cx.createRadialGradient(PX,BT+30,0,PX,BT+30,40);
+        g.addColorStop(0,'rgba(255,80,80,0.35)');
+        g.addColorStop(1,'rgba(255,80,80,0)');
+        cx.beginPath(); cx.arc(PX,BT+30,40,0,Math.PI*2);
+        cx.fillStyle=g; cx.fill();
+
+        cx.font='bold 22px Arial';
+        cx.fillStyle='#ff4444';
+        cx.textAlign='center';
+        cx.fillText('+', PX, BT-12);
+    }
+
+    if (minusOn) {
+        cx.beginPath();
+        cx.moveTo(MX, BT - 5);
+        cx.lineTo(MX, BB - 25);
+        cx.strokeStyle = '#4499ff';
+        cx.lineWidth   = 9;
+        cx.stroke();
+
+        const g = cx.createRadialGradient(MX,BT+30,0,MX,BT+30,40);
+        g.addColorStop(0,'rgba(80,150,255,0.35)');
+        g.addColorStop(1,'rgba(80,150,255,0)');
+        cx.beginPath(); cx.arc(MX,BT+30,40,0,Math.PI*2);
+        cx.fillStyle=g; cx.fill();
+
+        cx.font='bold 22px Arial';
+        cx.fillStyle='#4499ff';
+        cx.textAlign='center';
+        cx.fillText('−', MX, BT-12);
+    }
+
+    cx.restore();
+}
+
+/* ── 배터리 & 전선 ── */
+function drawBatteryWire() {
+    cx.save();
+    cx.lineCap = 'round';
+
+    // (+)극 전선 (위로 올라가 배터리까지)
+    cx.beginPath();
+    cx.moveTo(PX, BT-5);
+    cx.lineTo(PX, 38);
+    cx.lineTo(W/2-55, 38);
+    cx.strokeStyle = '#ff5555';
+    cx.lineWidth   = 3.5;
+    cx.stroke();
+
+    // (-)극 전선
+    cx.beginPath();
+    cx.moveTo(MX, BT-5);
+    cx.lineTo(MX, 38);
+    cx.lineTo(W/2+55, 38);
+    cx.strokeStyle = '#4499ff';
+    cx.lineWidth   = 3.5;
+    cx.stroke();
+
+    // 전류 흐름 점 (NaCl 한정)
+    if (expType === 'nacl') {
+        for (let i = 0; i < 4; i++) {
+            const t = ((tick*2.5 + i*22) % 90) / 90;
+            const fx = PX + (W/2-55-PX)*t;
+            cx.beginPath();
+            cx.arc(fx, 38, 5, 0, Math.PI*2);
+            cx.fillStyle = `rgba(255,220,60,${0.9-t*0.5})`;
+            cx.fill();
+        }
+    }
+
+    // 배터리 그리기
+    drawBattery(W/2, 38);
+
+    cx.restore();
+}
+
+function drawBattery(x, y) {
+    cx.save();
+    cx.translate(x, y);
+    cx.fillStyle   = '#333';
+    cx.strokeStyle = '#aaa';
+    cx.lineWidth   = 2;
+    cx.beginPath();
+    roundRect(cx, -48, -18, 96, 36, 7);
+    cx.fill(); cx.stroke();
+
+    cx.fillStyle='#ff5555';
+    cx.beginPath(); roundRect(cx,-42,-12,40,24,4); cx.fill();
+    cx.font='bold 16px Arial'; cx.fillStyle='#fff'; cx.textAlign='center';
+    cx.fillText('+', -22, 6);
+
+    cx.fillStyle='#4499ff';
+    cx.beginPath(); roundRect(cx,2,-12,40,24,4); cx.fill();
+    cx.font='bold 16px Arial'; cx.fillStyle='#fff'; cx.textAlign='center';
+    cx.fillText('−', 22, 6);
+
+    cx.restore();
+}
+
+function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x+r, y);
+    c.lineTo(x+w-r, y);
+    c.quadraticCurveTo(x+w,y, x+w,y+r);
+    c.lineTo(x+w, y+h-r);
+    c.quadraticCurveTo(x+w,y+h, x+w-r,y+h);
+    c.lineTo(x+r, y+h);
+    c.quadraticCurveTo(x,y+h, x,y+h-r);
+    c.lineTo(x, y+r);
+    c.quadraticCurveTo(x,y, x+r,y);
+    c.closePath();
+}
+
+/* ── 파티클 ── */
+function drawParticles() {
+    particles.forEach(p => {
+        // 글로우
+        const gc = p.type==='Na+' ? 'rgba(255,140,60,0.35)' :
+                   p.type==='Cl-' ? 'rgba(90,200,245,0.35)' :
+                                    'rgba(249,202,36,0.28)';
+        const gr = cx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.5);
+        gr.addColorStop(0, gc);
+        gr.addColorStop(1,'rgba(0,0,0,0)');
+        cx.beginPath(); cx.arc(p.x,p.y,p.r*2.5,0,Math.PI*2);
+        cx.fillStyle=gr; cx.fill();
+
+        // 본체
+        const bg = cx.createRadialGradient(p.x-p.r*.3,p.y-p.r*.3,1,p.x,p.y,p.r);
+        bg.addColorStop(0, lighten(p.color,45));
+        bg.addColorStop(1, p.color);
+        cx.beginPath(); cx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        cx.fillStyle=bg; cx.fill();
+        cx.strokeStyle='rgba(255,255,255,0.45)';
+        cx.lineWidth=1.8; cx.stroke();
+
+        // 라벨
+        cx.font=`bold ${p.r>13?11:10}px Arial`;
+        cx.fillStyle='#fff';
+        cx.textAlign='center';
+        cx.textBaseline='middle';
+        cx.fillText(p.label, p.x, p.y);
+    });
+    cx.textBaseline='alphabetic';
+}
+
+/* ── 이동 방향 힌트 화살표 ── */
+function drawArrows() {
+    if (expType !== 'nacl') return;
+    const alpha = 0.55 + 0.3*Math.sin(tick*0.05);
+    // Cl- → (+)극 (왼쪽)
+    drawDashedArrow(BR-160, BT+52, BL+100, BT+52, '#5bc8f5', 'Cl⁻ → (+)극', alpha);
+    // Na+ → (-)극 (오른쪽)
+    drawDashedArrow(BL+160, BT+90, BR-100, BT+90, '#ff8c42', 'Na⁺ → (-)극', alpha);
+}
+
+function drawDashedArrow(x1,y1,x2,y2,color,label,alpha) {
+    cx.save();
+    cx.globalAlpha = alpha;
+    cx.beginPath();
+    cx.moveTo(x1,y1); cx.lineTo(x2,y2);
+    cx.strokeStyle=color; cx.lineWidth=2.5;
+    cx.setLineDash([8,5]); cx.stroke(); cx.setLineDash([]);
+
+    const ang = Math.atan2(y2-y1, x2-x1);
+    cx.beginPath();
+    cx.moveTo(x2,y2);
+    cx.lineTo(x2-14*Math.cos(ang-.4), y2-14*Math.sin(ang-.4));
+    cx.lineTo(x2-14*Math.cos(ang+.4), y2-14*Math.sin(ang+.4));
+    cx.closePath();
+    cx.fillStyle=color; cx.fill();
+
+    cx.globalAlpha = alpha*0.9;
+    cx.font='bold 13px Malgun Gothic';
+    cx.fillStyle=color;
+    cx.textAlign='center';
+    cx.fillText(label, (x1+x2)/2, y1-10);
+    cx.restore();
+}
+
+function drawNoCurrentMsg() {
+    cx.save();
+    cx.font='bold 15px Malgun Gothic';
+    cx.fillStyle='rgba(255,215,0,0.85)';
+    cx.textAlign='center';
+    cx.fillText('⚠ 설탕 분자는 이온이 없어 전류가 흐르지 않습니다', W/2, WATER_FULL + 28);
+    cx.restore();
+}
+
+function drawIdleMsg() {
+    cx.save();
+    cx.font='20px Malgun Gothic';
+    cx.fillStyle='rgba(180,220,255,0.55)';
+    cx.textAlign='center';
+    cx.fillText('💧 물 넣기 버튼을 먼저 눌러주세요!', W/2, (BT+BB)/2);
+    cx.restore();
+}
+
+/* ── 색 밝게 ── */
+function lighten(hex, amt) {
+    const n=parseInt(hex.replace('#',''),16);
+    const r=Math.min(255,(n>>16)+amt);
+    const g=Math.min(255,((n>>8)&0xff)+amt);
+    const b=Math.min(255,(n&0xff)+amt);
+    return `rgb(${r},${g},${b})`;
+}
+
+// ════════════════════════════════════════════
+//  정보 박스 업데이트
+// ════════════════════════════════════════════
+function updateInfo() {
+    const box = document.getElementById('infoBox');
+    if (!hasWater) {
+        box.innerHTML=`<h3>📚 실험 안내</h3>
+        <p>① <strong>💧 물 넣기</strong> 버튼을 먼저 눌러 비커에 물을 채우세요.<br>
+           ② 실험할 물질을 선택하세요.<br>
+           ③ <span class="hp">+ 극</span>과 <span class="hn">- 극</span>을 연결하면 이온의 이동을 관찰합니다.<br>
+           ④ <strong>모두 취소하기</strong>로 초기화할 수 있습니다.</p>`;
+    } else if (!expType) {
+        box.innerHTML=`<h3>💧 물이 채워졌습니다!</h3>
+        <p>이제 실험할 물질을 선택하세요.<br>
+        🧂 <strong>염화나트륨</strong>은 전해질, 🍬 <strong>설탕</strong>은 비전해질입니다.</p>`;
+    } else if (expType==='nacl' && plusOn && minusOn) {
+        box.innerHTML=`<h3>🔬 염화나트륨(NaCl) 실험 결과</h3>
+        <p>NaCl은 물에 녹으면 <span class="hp">Na⁺</span>와 <span class="hn">Cl⁻</span>으로 <strong>이온화</strong>됩니다.<br><br>
+        ⚡ 전류가 흐르면:<br>
+        &nbsp;&nbsp;• <span class="hn">Cl⁻ (음이온)</span>은 <span class="hp">(+)극 쪽으로 이동</span>합니다.<br>
+        &nbsp;&nbsp;• <span class="hp">Na⁺ (양이온)</span>은 <span class="hn">(-)극 쪽으로 이동</span>합니다.<br><br>
+        ✅ 염화나트륨은 <strong>전해질</strong>이므로 전류가 흐릅니다.</p>`;
+    } else if (expType==='sugar' && plusOn && minusOn) {
+        box.innerHTML=`<h3>🔬 설탕(C₁₂H₂₂O₁₁) 실험 결과</h3>
+        <p>설탕은 물에 녹아도 <strong>이온화되지 않습니다.</strong><br><br>
+        ⚡ 전극을 연결해도:<br>
+        &nbsp;&nbsp;• <span class="hg">설탕 분자</span>는 어느 쪽으로도 이동하지 않습니다.<br><br>
+        ❌ 설탕은 <strong>비전해질</strong>이므로 전류가 흐르지 않습니다.</p>`;
+    } else if (expType==='nacl') {
+        box.innerHTML=`<h3>🧂 염화나트륨 선택됨</h3>
+        <p>염화나트륨(NaCl)은 <strong>전해질</strong>입니다.<br>
+        전극을 연결하면 이온의 이동을 관찰할 수 있습니다.<br><br>
+        👉 <span class="hp">+ 극</span>과 <span class="hn">- 극</span>을 모두 연결해 보세요!</p>`;
+    } else if (expType==='sugar') {
+        box.innerHTML=`<h3>🍬 설탕 선택됨</h3>
+        <p>설탕(C₁₂H₂₂O₁₁)은 <strong>비전해질</strong>입니다.<br>
+        물에 녹아도 이온을 만들지 않습니다.<br><br>
+        👉 <span class="hp">+ 극</span>과 <span class="hn">- 극</span>을 연결해 보세요!</p>`;
+    }
+}
+
+// ════════════════════════════════════════════
+//  초기 정지 화면
+// ════════════════════════════════════════════
+drawScene();
+</script>
+</body>
+</html>
